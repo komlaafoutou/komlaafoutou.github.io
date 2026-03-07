@@ -5,12 +5,11 @@ permalink: /about/
 includelink: true
 ---
 
-Hi, I'm **Komla** — a Software Engineer based in the Seattle area, currently working at **Microsoft Azure** where I build and maintain distributed control plane services that power large-scale monitoring infrastructure.
+Hi, I'm **Komla**, a Software Engineer based in the Seattle area. I currently work at **Microsoft** on [Azure Monitor](https://learn.microsoft.com/en-us/azure/azure-monitor/overview), specifically on the [Data Collection Rules](https://learn.microsoft.com/en-us/azure/azure-monitor/essentials/data-collection-rule-overview) platform, building and maintaining distributed control plane services that power large-scale monitoring infrastructure.
 
 I've spent the last 4+ years working on backend systems: designing APIs, optimizing high-throughput database queries, hardening distributed services, and making sure things don't break in production across multiple cloud regions. I care about reliability, clean architecture, and building tools that make life easier for both customers and teammates.
 
-Before Microsoft, I studied Computer Science (with a minor in Mathematics) at **Michigan State University**, where I was also a recipient of the MasterCard Foundation Scholars Program.
+Before Microsoft, I studied Computer Science (with a minor in Mathematics) at **[Michigan State University](https://msu.edu/)**, where I was a recipient of the **[Mastercard Foundation Scholars Program](https://mastercardfdn.org/all/scholars/)**.
 
-I'm fluent in English and French, and I write code primarily in C#, TypeScript, Python, PowerShell, and SQL.
 
 Feel free to connect with me on [LinkedIn](https://linkedin.com) or check out my work on [GitHub](https://github.com).
