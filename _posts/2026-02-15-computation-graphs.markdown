@@ -5,19 +5,19 @@ date: 2026-02-15 11:14:29 -0500
 categories: machine-learning fundamentals
 ---
 
-If you've ever trained a neural network, you've used a computation graph, you just might not have thought about it explicitly. Let's fix that.
+Every time you train a neural network, there's a computation graph working behind the scenes. I spent a while not really thinking about what that meant, and once I did, a lot of things about PyTorch and TensorFlow clicked into place. So let's walk through it.
 
-## What is a Computation Graph?
+## What's a Computation Graph, Actually?
 
-A computation graph is a way of representing a mathematical expression as a directed graph. There are two types of nodes: **value nodes** (variables and intermediate results) and **operation nodes** (like addition or multiplication). Edges carry values flowing from one node to the next.
+It's a directed graph that represents a math expression. You've got two kinds of nodes: **value nodes** (your variables, plus any intermediate results) and **operation nodes** (addition, multiplication, etc.). Edges connect them — values flow in, operations transform them, new values come out.
 
-Take a simple expression:
+Here's a dead-simple example:
 
 ```
 z = (x + y) * w
 ```
 
-As a graph, this looks like:
+Drawn as a graph:
 
 ```
 [x] ─┐
@@ -27,20 +27,20 @@ As a graph, this looks like:
                            [w]
 ```
 
-Where `[x]`, `[y]`, `[w]`, `[x+y]`, and `[z]` are value nodes, and `[+]` and `[*]` are operation nodes. Both are first-class citizens in the graph — the values aren't just implicit labels on edges, they're nodes that can be reasoned about independently.
+Notice that `[x]`, `[y]`, `[w]`, `[x+y]`, and `[z]` are all value nodes, while `[+]` and `[*]` are operation nodes. One thing that tripped me up early on: the values aren't just labels sitting on edges. They're proper nodes in the graph, which matters when we get to gradients.
 
 
-## Why Do We Care?
+## OK, but Why Should I Care?
 
-The real power shows up when you need to compute **gradients** — which is exactly what happens during neural network training.
+Because **gradients**. When you're training a network, you need derivatives of your loss with respect to every parameter. That's a lot of chain rule.
 
-Because the graph tracks every operation and every intermediate value, it lets us apply the chain rule systematically, working backwards from the output to each input. This is called **backpropagation**, and the computation graph is what makes it mechanical and automatable.
+The nice thing about having a graph is that it records every operation and every intermediate value along the way. So you can walk backwards through it — from output to inputs — applying the chain rule at each step. That's backpropagation, and the computation graph is what makes it possible to do mechanically instead of by hand.
 
-Crucially, **gradients live on the value nodes**. During the backward pass, each value node accumulates the gradient of the final output with respect to itself. So after backprop, `x` doesn't just hold its forward value `2.0`, it also holds `dz/dx`.
+Here's the part I find most satisfying: **gradients land on the value nodes**. After the backward pass, each value node holds the gradient of the output with respect to itself. So `x` doesn't just know it equals `2.0` — it also knows `dz/dx`.
 
-Frameworks like PyTorch and TensorFlow build this graph for you as your code runs, then traverse it in reverse to compute gradients with a single call to `.backward()`.
+PyTorch and TensorFlow handle all of this for you. They build the graph as your code runs, then walk it backwards when you call `.backward()`.
 
-## A Concrete Example
+## Seeing It in Code
 
 ```python
 import torch
@@ -58,20 +58,94 @@ print(y.grad)  # dz/dy = w = 4.0
 print(w.grad)  # dz/dw = (x + y) = 5.0
 ```
 
-PyTorch quietly built a computation graph as you wrote `z = (x + y) * w`, tracking both the value nodes (`x`, `y`, `w`, the intermediate `x+y`, and `z`) and the operation nodes (`+` and `*`). Calling `z.backward()` walked it in reverse, depositing gradients onto each value node along the way.
+Nothing special happened on the surface — you just wrote `z = (x + y) * w`. But PyTorch was quietly recording every operation, building up value nodes and operation nodes behind the scenes. When you called `z.backward()`, it walked that graph in reverse, dropping the computed gradients onto each value node.
+
+## Building It From Scratch
+
+Using PyTorch is nice, but it hides everything. Let's build a tiny autograd engine so we can see what's actually going on inside. The whole thing fits in about 40 lines:
+
+```python
+class Value:
+    def __init__(self, data, children=(), op=''):
+        self.data = data
+        self.grad = 0.0
+        self._backward = lambda: None
+        self._children = set(children)
+        self._op = op
+
+    def __add__(self, other):
+        out = Value(self.data + other.data, (self, other), '+')
+        def _backward():
+            # d(a+b)/da = 1, d(a+b)/db = 1
+            self.grad += out.grad
+            other.grad += out.grad
+        out._backward = _backward
+        return out
+
+    def __mul__(self, other):
+        out = Value(self.data * other.data, (self, other), '*')
+        def _backward():
+            # d(a*b)/da = b, d(a*b)/db = a
+            self.grad += other.data * out.grad
+            other.grad += self.data * out.grad
+        out._backward = _backward
+        return out
+
+    def backward(self):
+        # topological sort so we process nodes in the right order
+        order, visited = [], set()
+        def topo(node):
+            if node not in visited:
+                visited.add(node)
+                for child in node._children:
+                    topo(child)
+                order.append(node)
+        topo(self)
+
+        self.grad = 1.0  # dz/dz = 1
+        for node in reversed(order):
+            node._backward()
+
+    def __repr__(self):
+        return f"Value(data={self.data}, grad={self.grad})"
+```
+
+Each `Value` is a node in the graph. When you do `a + b`, it creates a new `Value` wired to its inputs, and attaches a `_backward` function that knows how to push gradients back through that specific operation. That's the operation node and its local gradient rule, baked into one closure.
+
+The `backward()` method does a topological sort of the graph (so we visit nodes in dependency order), seeds the output gradient at 1.0, then calls each node's `_backward` in reverse. Gradients accumulate via `+=` because a value used in multiple operations receives gradient contributions from each one.
+
+Let's run the same example:
+
+```python
+x = Value(2.0)
+y = Value(3.0)
+w = Value(4.0)
+
+z = (x + y) * w
+
+z.backward()
+
+print(x)  # Value(data=2.0, grad=4.0)
+print(y)  # Value(data=3.0, grad=4.0)
+print(w)  # Value(data=4.0, grad=5.0)
+```
+
+Same results as PyTorch, but now you can see exactly where those gradients came from. The `*` node pushed `out.grad * other.data` back to `self` (that's how `x` got `w`'s value of 4.0 as its gradient), and `out.grad * self.data` back to `other` (that's how `w` got `x + y = 5.0`).
+
+This is basically what PyTorch does internally — just with GPU support, broadcasting, and a few hundred more operations. If you want to go deeper, this implementation is heavily inspired by Andrej Karpathy's [micrograd](https://github.com/karpathy/micrograd) — a full autograd engine in ~100 lines of Python that supports enough ops to train small neural networks. Highly recommended.
 
 ## Static vs. Dynamic Graphs
 
-There are two flavors worth knowing:
+This is one of those topics people used to argue about a lot more than they do now.
 
-**Static graphs** (TensorFlow 1.x style) require you to define the full graph upfront before running any computation. This enables aggressive optimization but makes debugging painful.
+**Static graphs** mean you define the entire computation upfront, then execute it. TensorFlow 1.x worked this way. TensorFlow 2.x still does this under the hood when you use `tf.function`. The upside is the framework can see the whole picture and optimize aggressively. The downside is that debugging feels like pulling teeth — you can't just stick a `print()` in the middle of your graph.
 
-**Dynamic graphs** (PyTorch style) build the graph on the fly as operations execute. The graph is recreated each forward pass, which makes it feel like normal Python code and much easier to reason about.
+**Dynamic graphs** get built on the fly as your code runs. PyTorch has always worked this way, and TensorFlow 2.x does too by default (eager mode). JAX falls somewhere in between — eager by default, static when you `jit`. The tradeoff is obvious: it feels like writing normal Python, at the cost of some optimization opportunities.
 
-Most modern frameworks have converged toward dynamic graphs for the developer experience, while finding other ways to optimize performance.
+In practice, the industry settled this one. Everyone defaults to dynamic graphs now, and reaches for static compilation (`torch.compile`, `tf.function`) when they need the speed.
 
-## The Takeaway
+## Wrapping Up
 
-Computation graphs aren't just an implementation detail — they're the reason automatic differentiation works at scale. Understanding them gives you better intuition for why frameworks behave the way they do, and helps when things go wrong.
+I used to think of computation graphs as some abstract thing the framework dealt with. But once you see them for what they are — a record of every operation you ran, structured so you can walk it backwards for gradients — a lot of "why does the framework do it this way?" questions answer themselves.
 
-Next time you call `.backward()`, you'll know what's actually happening under the hood.
+Next time something weird happens during training, try thinking about the graph. It usually helps.
