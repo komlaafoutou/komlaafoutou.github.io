@@ -12,4 +12,4 @@ I've spent the last 4+ years working on backend systems: designing APIs, optimiz
 Before Microsoft, I earned a Bachelor's degree in Computer Science (with a minor in Mathematics) at **[Michigan State University](https://msu.edu/)**, where I was a recipient of the **[Mastercard Foundation Scholars Program](https://mastercardfdn.org/all/scholars/)**.
 
 
-Feel free to connect with me on [LinkedIn](https://www.linkedin.com/in/komlaafoutou/) or check out my work on [GitHub](https://github.com/AfstoneBharfon).
+Feel free to connect with me on [LinkedIn](https://www.linkedin.com/in/komlaafoutou/) or check out my work on [GitHub](https://github.com/komlaafoutou).
